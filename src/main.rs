@@ -14,14 +14,51 @@ use irc::client::prelude::*;
 extern crate serde;
 extern crate serde_json;
 
+mod twitch;
+use twitch::TwitchAPI;
+
 fn main() {
-/*
+    let observer_count = 10;
+
+    let mut api = TwitchAPI::new("bvfkov2tepy3jfb3fcxk2ezwx91erw".to_owned());
+    let data = api.generic_request("https://api.twitch.tv/helix/streams");
+    println!("{}", data);
+    
+    let channels = Vec::<String>::new();
+
+    
+
+	let entries = &data["data"];
+    
+    // Generate list of channels
+    let channels = Vec::<String>::new();
+    for e in entries.as_array().expect("Data is not a valid array") {
+        //println!("{:?}", e);
+        (|| {
+            let mut easy = Easy::new();
+            easy.url("https://api.twitch.tv/helix/users/?id=15564828&id=100814397").unwrap();
+            let mut headers = List::new();
+	        headers.append("Authorization: Bearer bvfkov2tepy3jfb3fcxk2ezwx91erw");
+	        easy.http_headers(headers).expect("failed to set headers");
+            let mut dst = Vec::new();
+
+            {
+                let mut transfer = easy.transfer();
+                transfer.write_function(|data| { dst.extend_from_slice(data); Ok(data.len()) }).unwrap();
+                transfer.perform().unwrap();
+            }
+            println!("{}", &String::from_utf8(dst).unwrap());
+        })();
+    }
+    return;
+
     // We can also load the Config at runtime via Config::load("path/to/config.toml")
     let config = Config {
         nickname: Some("Nico_Scarlet".to_owned()),
         server: Some("irc.chat.twitch.tv".to_owned()),
 		port: Some(6667),
 		use_ssl: Some(false),
+        channels: Some(vec!["#39298218".to_owned()]),
         ..Config::default()
     };
 
@@ -39,38 +76,15 @@ fn main() {
     });
 
     reactor.run().unwrap();
-	*/
+	
+
+    return;
 
 	let pool = my::Pool::new(get_options()).unwrap();
 
 	// drop_tables(&mut pool.get_conn().expect("Failed to get connection."));
 	// create_tables(&mut pool.get_conn().expect("Failed to get connection."));
 
-	let mut dst = Vec::new();
-	let mut easy = Easy::new();
-	easy.url("https://api.twitch.tv/helix/streams").unwrap();
-
-	let mut headers = List::new();
-	headers.append("Authorization: Bearer bvfkov2tepy3jfb3fcxk2ezwx91erw");
-	easy.http_headers(headers).expect("Failed to set headers");
-
-	{
-		let mut transfer = easy.transfer();
-		transfer.write_function(|data| {
-			dst.extend_from_slice(data);
-			Ok(data.len())
-		}).unwrap();
-		transfer.perform().unwrap();
-	}
-
-	// println!("{}", String::from_utf8(dst).expect("REEEEEEEE"));
-
-	let data: serde_json::Value = serde_json::from_str(&String::from_utf8(dst).unwrap()).expect("Valid Json");
-	let entries = &data["data"];
-
-	for entry in entries.as_array().unwrap() {
-		println!("{}", entry);
-	}
 }
 
 fn get_options() -> my::Opts {
@@ -78,8 +92,8 @@ fn get_options() -> my::Opts {
 	builder
 		.user(Some("root"))
 		.ip_or_hostname(Some("localhost"))
-		.db_name(Some("twitch_data_mining"))
-		.prefer_socket(false);
+		.db_name(Some("twitch_data_mining"));
+		//.prefer_socket(false);
 
 	return my::Opts::from(builder);
 }
