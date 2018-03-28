@@ -1,0 +1,13 @@
+[package]
+name = "twitch_api_test"
+version = "0.1.0"
+authors = ["Nico_Scarlet"]
+
+[dependencies]
+irc="*"
+mysql="*"
+
+curl={ git="http://github.com/alexcrichton/curl-rust" }
+serde="*"
+serde_json="*"
+serde_derive="*"
