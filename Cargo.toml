@@ -5,9 +5,12 @@ authors = ["Nico_Scarlet"]
 
 [dependencies]
 irc="*"
-mysql="*"
-
 curl={ git="http://github.com/alexcrichton/curl-rust" }
 serde="*"
 serde_json="*"
 serde_derive="*"
+rocket="*"
+rocket_codegen="*"
+
+[dependencies.mysql]
+features=["rustc-serialize"]

@@ -5,12 +5,13 @@ use curl::easy::{Easy, List};
 
 
 pub struct TwitchAPI {
-    token: String
+    token: String,
+    base_url: String
 }
 
 impl TwitchAPI {
     pub fn new(token: String) -> TwitchAPI {
-        TwitchAPI { token }
+        TwitchAPI { token, base_url: "https://api.twitch.tv/helix/".to_owned()  }
     }
 
     pub fn generic_request(&self, url: &str) -> serde_json::Value {
@@ -32,5 +33,41 @@ impl TwitchAPI {
         }
 
         return serde_json::from_str(&String::from_utf8(buf).expect("Request returned invalid utf8 string")).expect("Request returned invalid json");
+    }
+
+    pub fn request(&mut self) -> Request {
+        Request::new(self)
+    }
+}
+
+
+pub struct Request<'a> {
+    api: &'a TwitchAPI,
+    resource: String,
+    params: Vec<(String, String)>,
+}
+
+impl<'a> Request<'a> {
+    pub fn new(api: &'a TwitchAPI) -> Request<'a> {
+        Request { api, resource: String::new(), params: Vec::new() }
+    }
+
+    pub fn resource(mut self, r: String) -> Request<'a> {
+        self.resource = r;
+        return self;
+    }
+
+    pub fn param(mut self, p: (String, String)) -> Request<'a> {
+        self.params.push(p);
+        return self;
+    }
+
+    pub fn get(&self) -> serde_json::Value {
+        let mut queryString = String::new();
+        for i in 0..self.params.len() {
+            if i != 0 { queryString.push('&') };
+            queryString.push_str(&format!("{}={}", self.params[i].0, self.params[i].1));
+        }
+        self.api.generic_request(&format!("{}/{}/?{}", self.api.base_url, self.resource, queryString))
     }
 }
