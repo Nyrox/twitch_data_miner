@@ -16,7 +16,7 @@ pub struct IRCService {
 }
 
 impl IRCService {
-    pub fn start_service() -> IRCService {
+    pub fn start_service(channels: Vec<String>) -> IRCService {
         let config = Config {
             nickname: Some("Nico_Scarlet".to_owned()),
             server: Some("irc.chat.twitch.tv".to_owned()),
@@ -35,6 +35,10 @@ impl IRCService {
             let client = reactor.prepare_client_and_connect(&config).unwrap();
 		    client.send(Command::PASS("oauth:bvfkov2tepy3jfb3fcxk2ezwx91erw".to_owned())).expect("Failed to send PASS");
             client.send(Command::NICK("nico_scarlet".to_owned())).expect("Failed to send NICK.");
+            
+            for channel in channels {
+                client.send(Command::JOIN(channel, None, None)).expect("Failed to join channel");
+            }
 
             reactor.register_client_with_handler(client, move |client, message| {
                 while let Some(message) = internal_receiver.try_recv().ok() {

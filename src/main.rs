@@ -18,13 +18,13 @@ extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 use serde::de::{self, Deserializer, Visitor, Unexpected}; 
 
-mod twitch;
+pub mod twitch;
 use twitch::TwitchAPI;
 
-mod models;
+pub mod models;
 use models::ModelChannels;
 
-mod irc;
+pub mod irc;
 use irc::IRCService;
 use irc::irc_crate::client::prelude::*;
 
@@ -66,6 +66,7 @@ fn deserialize_parse<'de, T, D>(deserializer: D) -> Result<T, D::Error>
     deserializer.deserialize_string(ParseVisitor::<T> { _marker: PhantomData })      
 }
 
+// A stream as returned by the twitch API
 #[derive(Debug, Deserialize)]
 struct Stream {
     #[serde(deserialize_with="deserialize_parse")]
@@ -75,6 +76,12 @@ struct Stream {
     #[serde(deserialize_with="deserialize_parse")]
     game_id: u64,
     title: String,
+}
+
+// A usr as returned by the twitch API
+#[derive(Debug)]
+struct User {
+    
 }
 
 fn get_streams(api: &mut TwitchAPI, count: i32) -> Vec<Stream> {
@@ -100,50 +107,38 @@ impl Controller {
         let mut api = TwitchAPI::new("bvfkov2tepy3jfb3fcxk2ezwx91erw".to_owned());
         let mut sql_pool = my::Pool::new(get_options()).unwrap();
 
-        let mut _self = Controller { 
-            api: TwitchAPI::new("bvfkov2tepy3jfb3fcxk2ezwx91erw".to_owned()),
-            irc_service: IRCService::start_service(),
-            sql_pool: my::Pool::new(get_options()).unwrap()
-        };
-        
         let streams = get_streams(&mut api, 20);
         println!("{:?}", streams);
-
- /*    // Grab the top 100 channels
-        let data = _self.api.request()
-            .resource("streams".to_owned())
-            .param(("first".to_owned(), format!("{}", 20)))
-            .get();
- 
-        println!("{}", data);
     
-        let mut channels = Vec::<String>::new();
-        
-        println!("Polling channels...");
-        for e in data["data"].as_array().expect("data not a valid array") {            
-            let channel = ModelChannels::get_single(&mut _self.get_conn(), e["user_id"].as_str().unwrap().parse::<i64>().expect("Failed to parse user_id into integer"));
-            
-            let channel = match channel {
+        let mut channels = vec![];
+
+        // Convert to channels
+        for stream in streams {
+            let channel = match ModelChannels::get_single(&mut sql_pool.get_conn().unwrap(), stream.user_id as i64) {
                 Some(c) => c,
                 None => {
-                    println!("Channel not listed in db. Fetching from twitch");
-                    let user = &_self.api.request()
+                    println!("Channel {} not listed in db. Fetching from twitch API...", stream.id);
+                    let user = &api.request()
                         .resource("users".to_owned())
-                        .param(("id".to_owned(), e["user_id"].as_str().expect("1").to_owned()))
+                        .param(("id".to_owned(), stream.user_id.to_string()))
                         .get()["data"][0];
 
-                     let channel = models::Channel { id: user["id"].as_str().unwrap().parse().unwrap(), login: user["login"].as_str().unwrap().to_owned() };
-                     ModelChannels::insert(&mut _self.get_conn(), channel.clone());
-                     channel
+                    let channel = models::Channel { id: user["id"].as_str().unwrap().parse().unwrap(), login: user["login"].as_str().unwrap().to_owned() };
+                    ModelChannels::insert(&mut sql_pool.get_conn().unwrap(), channel.clone());
+                    channel
                 }
             };
 
-            channels.push(format!("#{}", channel.login.clone()));
+            channels.push(format!("#{}", channel.login).to_owned());
         }
-        for channel in channels {
-            _self.irc_service.join_channel(channel);
-        }
- */   
+    
+ 
+        let mut _self = Controller { 
+            api: api,
+            irc_service: IRCService::start_service(channels),
+            sql_pool: sql_pool,
+        };
+
         println!("Listening for messages now: ");
         loop {
             if let Some(message) = _self.irc_service.try_poll_message() {
@@ -159,19 +154,27 @@ impl Controller {
     pub fn handle_message(&mut self, message: Message) {
         
         match &message.command {
-            &Command::PRIVMSG(ref target, ref content) => { 
+            &Command::PRIVMSG(ref target, ref content) => {
                 let login = target.split_at(1).1;
                 let user = message.source_nickname();
                 let mut conn = self.get_conn();
+                
+                let mut user_model = ModelUsers::new(self.get_conn());
 
                 conn.prep_exec(r"
                     UPDATE Channels SET message_count=message_count + 1 WHERE login=:channel
                 ", params!{ "channel" => login }).expect("Failed to increment message count on channel.");
 
                 if let Some(user) = user {
-                    conn.prep_exec(r"
-                        UPDATE Users SET message_count=message_count + 1 WHERE nick=:nick
-                    ", params!{ "nick" => user }).expect("Failed to increment message count on user.");
+                    // If our user exists, increment the message count
+                    if let Some(user) = user_model.get_single(user) {
+                        conn.prep_exec(r"
+                            UPDATE Users SET message_count=message_count + 1 WHERE nick=:nick
+                        ", params!{ "nick" => user }).expect("Failed to increment message count on user.");
+                    }
+                    else {
+                    
+                    }
                 }
             },
             _ => {}
